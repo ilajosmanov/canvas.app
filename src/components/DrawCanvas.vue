@@ -1,115 +1,122 @@
 <script setup lang="ts">
-import throttle from 'lodash.throttle'
-import { inject, onMounted, reactive, watch } from 'vue'
-
 import {
-  type FrameContainerProvider,
-  frameContainer,
-} from '../shared/config/di'
+  ComponentPublicInstance,
+  computed,
+  onMounted,
+  onUnmounted,
+  provide,
+  reactive,
+} from 'vue'
 
-let frame = $(inject<FrameContainerProvider>(frameContainer))
+import { Canvas } from '../shared/config/di'
 
-const canvasRef = $ref<HTMLDivElement | null>(null)
+import Node from './Node.vue'
 
-const MAX_SCALE = 10
-const MIN_SCALE = 0.5
-
-const origin = reactive<{ x: number | null; y: number | null }>({
-  x: null,
-  y: null,
-})
-
-const position = reactive({ top: 0, left: 0 })
-const base = reactive({ width: 0, height: 0 })
-const size = reactive({ width: 0, height: 0 })
+const emit = defineEmits<{
+  (event: 'create-node', coords: { x: number; y: number }): void
+}>()
 
 let scale = $ref(1)
 
-const handleWheel = throttle((e: WheelEvent) => {
-  if (frame.isAltPressed) {
-    if (canvasRef === null) return
+const node = $ref<ComponentPublicInstance>()
 
-    let _scale = scale + e.deltaY * -0.01
-    const width = _scale * size.width
+const coords = reactive({
+  x: 0,
+  y: 0,
+})
+const origin = reactive({
+  x: 0,
+  y: 0,
+})
 
-    if (e.deltaY < 0) {
-      if (width / base.width >= MAX_SCALE) {
-        return
-      }
-    } else if (e.deltaY > 0) {
-      if (width / base.width <= MIN_SCALE) {
-        return
-      }
+function handleCreateNode(e: MouseEvent) {
+  const target = node.$el as HTMLElement
+  const rect = target.getBoundingClientRect()
+
+  emit('create-node', {
+    x: (e.clientX - rect.left - target.clientLeft) * (1 / scale),
+    y: (e.clientY - rect.top - target.clientTop) * (1 / scale),
+  })
+}
+
+function handleWheel(e: WheelEvent) {
+  e.preventDefault()
+
+  const speed = 0.1
+
+  if (e.deltaY % 2 !== 0) {
+    let newScale = scale + ((e.deltaY % 2) * -1) / 20
+
+    if (newScale > 0.1 && newScale < 5) {
+      scale = newScale
     }
 
-    scale = _scale
+    return
   }
-}, 20)
 
-const handleMove = throttle((e: MouseEvent) => {
-  if (canvasRef !== null) {
-    origin.x = (canvasRef.offsetLeft - (e.clientX + frame.scroll.x)) * -1
-    origin.y = (canvasRef.offsetTop - (e.clientY + frame.scroll.y)) * -1
+  if (e.deltaY < 0) {
+    coords.y += e.deltaY * -speed
+  } else {
+    coords.y -= e.deltaY * speed
   }
-}, 20)
 
-watch(
-  () => frame.isAltPressed,
-  (is) => {
-    if (!is) {
-      if (canvasRef === null) return
-
-      const rect = canvasRef.getBoundingClientRect()
-
-      scale = 1
-      position.left = rect.left + frame.scroll.x
-      position.top = rect.top + frame.scroll.y
-
-      if (Math.ceil(rect.width / base.width) > MAX_SCALE) {
-        size.width = base.width * MAX_SCALE
-        size.height = base.height * MAX_SCALE
-        return
-      }
-
-      if (Math.ceil(rect.width / base.width) < MIN_SCALE) {
-        size.width = base.width * MIN_SCALE
-        size.height = base.height * MIN_SCALE
-        return
-      }
-
-      size.width = rect.width
-      size.height = rect.height
-    }
+  if (e.deltaX < 0) {
+    coords.x -= e.deltaX * speed
+  } else {
+    coords.x += e.deltaX * -speed
   }
-)
+}
 
 onMounted(() => {
-  if (canvasRef !== null) {
-    size.width = frame.width / 4
-    size.height = frame.height / 2
-
-    position.left = frame.width / 2 - size.width / 2
-    position.top = frame.height / 2 - size.height / 2
-
-    base.width = size.width
-    base.height = size.height
-  }
+  window.addEventListener('wheel', handleWheel, { passive: false })
 })
+
+onUnmounted(() => {
+  window.removeEventListener('wheel', handleWheel)
+})
+
+provide(
+  Canvas,
+  computed(() => ({
+    ...coords,
+    scale,
+  }))
+)
 </script>
 
 <template>
-  <div
-    ref="canvasRef"
-    :style="{
-      width: `${size.width}px`,
-      height: `${size.height}px`,
-      top: `${position.top}px`,
-      left: `${position.left}px`,
-      transform: `scale(${scale})`,
-      transformOrigin: `${origin.x}px ${origin.y}px`,
-    }"
-    class="shadow-sm border border-gray-300 rounded-md absolute"
-    @mousemove.passive="handleMove"
-    @wheel.stop.passive="handleWheel"
-  ></div>
+  <svg class="fixed inset-0 w-full h-full" @click="handleCreateNode">
+    <filter id="roughpaper" x="0%" y="0%" width="100%" height="100%">
+      <feTurbulence
+        type="fractalNoise"
+        baseFrequency="0.03"
+        result="noise"
+        numOctaves="5"
+      />
+
+      <feDiffuseLighting in="noise" lighting-color="white" surfaceScale="2">
+        <feDistantLight azimuth="35" elevation="75" />
+      </feDiffuseLighting>
+    </filter>
+
+    <rect
+      x="0"
+      y="0"
+      width="100%"
+      height="100%"
+      filter="url(#roughpaper)"
+      fill="none"
+    />
+  </svg>
+
+  <Node
+    ref="node"
+    :x="coords.x"
+    :y="coords.y"
+    :scale="scale"
+    class="w-0 h-0 node"
+    @click="handleCreateNode"
+  >
+    <slot />
+  </Node>
 </template>
