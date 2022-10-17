@@ -10,18 +10,7 @@ const fxCreateNode = createEffect(async (node: Node) => {
   return { ...node, id }
 })
 
-export const $nodes = createStore<(Node & { id: string })[]>([
-  // {
-  //   id: 'XrZmCgiza3PY5V4R7DxYo',
-  //   x: 412,
-  //   y: 122,
-  // },
-  // {
-  //   id: 'lF208t8RVa4X0JKzMWnJt',
-  //   x: 434,
-  //   y: 381,
-  // },
-])
+export const $nodes = createStore<(Node & { id: string })[]>([])
 
 $nodes.on(fxCreateNode.doneData, (nodes, node) => [...nodes, node])
 

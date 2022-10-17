@@ -1,14 +1,5 @@
 <script setup lang="ts">
-import {
-  ComponentPublicInstance,
-  computed,
-  onMounted,
-  onUnmounted,
-  provide,
-  reactive,
-} from 'vue'
-
-import { Canvas } from '../shared/config/di'
+import { ComponentPublicInstance, onMounted, onUnmounted, reactive } from 'vue'
 
 import Node from './Node.vue'
 
@@ -16,27 +7,35 @@ const emit = defineEmits<{
   (event: 'create-node', coords: { x: number; y: number }): void
 }>()
 
-let scale = $ref(1)
-
 const node = $ref<ComponentPublicInstance>()
 
+let scale = $ref(1)
 const coords = reactive({
-  x: 0,
-  y: 0,
+  x: 1,
+  y: 1,
 })
-const origin = reactive({
-  x: 0,
-  y: 0,
-})
+
+function getRealPoints(x: number, y: number) {
+  const el = node.$el as HTMLElement
+  const rect = el.getBoundingClientRect()
+
+  return {
+    x: (x - rect.left - el.clientLeft) * (1 / scale),
+    y: (y - rect.top - el.clientTop) * (1 / scale),
+  }
+}
+
+function zoom(newScale: number, x: number, y: number) {
+  const ratio = 1 - newScale / scale
+
+  coords.x += (x - coords.x) * ratio
+  coords.y += (y - coords.y) * ratio
+
+  scale = newScale
+}
 
 function handleCreateNode(e: MouseEvent) {
-  const target = node.$el as HTMLElement
-  const rect = target.getBoundingClientRect()
-
-  emit('create-node', {
-    x: (e.clientX - rect.left - target.clientLeft) * (1 / scale),
-    y: (e.clientY - rect.top - target.clientTop) * (1 / scale),
-  })
+  emit('create-node', getRealPoints(e.clientX, e.clientY))
 }
 
 function handleWheel(e: WheelEvent) {
@@ -47,10 +46,7 @@ function handleWheel(e: WheelEvent) {
   if (e.deltaY % 2 !== 0) {
     let newScale = scale + ((e.deltaY % 2) * -1) / 20
 
-    if (newScale > 0.1 && newScale < 5) {
-      scale = newScale
-    }
-
+    zoom(newScale, e.clientX, e.clientY)
     return
   }
 
@@ -74,14 +70,6 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener('wheel', handleWheel)
 })
-
-provide(
-  Canvas,
-  computed(() => ({
-    ...coords,
-    scale,
-  }))
-)
 </script>
 
 <template>
@@ -109,14 +97,7 @@ provide(
     />
   </svg>
 
-  <Node
-    ref="node"
-    :x="coords.x"
-    :y="coords.y"
-    :scale="scale"
-    class="w-0 h-0 node"
-    @click="handleCreateNode"
-  >
+  <Node ref="node" :x="coords.x" :y="coords.y" :scale="scale" class="w-0 h-0">
     <slot />
   </Node>
 </template>
