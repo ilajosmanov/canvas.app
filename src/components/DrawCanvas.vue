@@ -46,7 +46,10 @@ function handleWheel(e: WheelEvent) {
   if (e.deltaY % 2 !== 0) {
     let newScale = scale + ((e.deltaY % 2) * -1) / 20
 
-    zoom(newScale, e.clientX, e.clientY)
+    if (newScale >= 0.25 && newScale < 5) {
+      zoom(newScale, e.clientX, e.clientY)
+    }
+
     return
   }
 
@@ -97,7 +100,19 @@ onUnmounted(() => {
     />
   </svg>
 
-  <Node ref="node" :x="coords.x" :y="coords.y" :scale="scale" class="w-0 h-0">
+  <Node
+    ref="node"
+    :x="coords.x"
+    :y="coords.y"
+    :scale="scale"
+    class="w-0 h-0 back-face node"
+  >
     <slot />
   </Node>
 </template>
+
+<style scoped>
+.node {
+  backface-visibility: hidden;
+}
+</style>
